@@ -16,35 +16,29 @@ import jakarta.persistence.LockModeType;
 
 @Repository
 public interface TicketRepository extends JpaRepository<Ticket, UUID> {
-	@Transactional
-	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Transactional(readOnly = true)
+	@Lock(LockModeType.OPTIMISTIC)
 	@Query("SELECT t FROM Ticket t WHERE t.ticketing.id = :ticketingId AND t.purchase IS NULL ORDER BY t.id")
 	List<Ticket> findByTicketingIdAndNonPurchased(UUID ticketingId, Limit limit);
 
-	@Transactional
-	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Transactional(readOnly = true)
+	@Lock(LockModeType.OPTIMISTIC)
 	@Query("SELECT t FROM Ticket t WHERE t.ticketing.id = :ticketingId AND t.purchase IS NULL ORDER BY FUNCTION('RAND')")
 	List<Ticket> findByTicketingIdAndNonPurchasedRandom(UUID ticketingId, Limit limit);
 
-	@Transactional
+	@Transactional(readOnly = true)
 	@Query(value = """
         with target as (
-        	select
-        		t.ticket_id as ticket_id,
-        		row_number() over(order by t.ticket_id) as rownum
+        	select *, row_number() over(order by t.ticket_id) as num
         	from tickets t
-        	where
-        		t.ticketing_id = :ticketingId
-                and t.purchase_id is null
-            order by t.ticket_id
-        ), tmp as (
-        	select floor(rand() * (count(*) - :limit)) as base from target
+        	where t.ticketing_id = :ticketingId and purchase_id is null
         )
-        select t.*
-        from target t, tmp tmp
-        where t.rownum > tmp.base
+        select *
+        from target t, (
+        	select floor(rand() * (count(*) - :limit)) as base from target
+        ) c
+        where t.num > c.base
         limit :limit
-        for update
       """, nativeQuery = true)
 	List<Ticket> findByTicketingIdAndNonPurchasedRandomOptimize(UUID ticketingId, int limit);
 }

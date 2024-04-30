@@ -16,7 +16,6 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.MySQLDialect
         format_sql: true
-        generate_statistics: true
         jdbc.batch_size: 1000
         order_inserts: true
         order_updates: true
@@ -28,7 +27,3 @@ spring:
 logging:
   level:
     ROOT: INFO
-    org.hibernate.SQL: DEBUG
-    org.hibernate.orm.jdbc.bind: TRACE
-    org.springframework.orm: TRACE
-    org.springframework.transaction: TRACE

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
 import org.assertj.core.api.Assertions;
@@ -51,15 +52,17 @@ public class PurchaseServiceTest {
 	@BeforeEach
 	@Transactional
 	void initTable() {
-		var ticketing = ticketingRepository.save(Ticketing.builder().title("title").build());
-		var stocks = IntStream.rangeClosed(1, STOCK_CNT).boxed().map((i)-> Ticket.builder().ticketing(ticketing).build()).toList();
-		ticketRepository.saveAll(stocks);
+		for (int idx = 0; idx < 3; idx++) {
+			var ticketing = ticketingRepository.save(Ticketing.builder().title("title").build());
+			var stocks = IntStream.rangeClosed(1, STOCK_CNT).boxed().map((i)-> Ticket.builder().ticketing(ticketing).build()).toList();
+			ticketRepository.saveAll(stocks);
+			ticketingId = ticketing.getId();
+		}
 		userEmails = new ArrayList<>();
 		for (var num = 1; num <= USER_CNT; num++) {
 			userEmails.add("name" + num);
 		}
 		userEmails.forEach(this::createMember);
-		ticketingId = ticketing.getId();
 	}
 
 	@AfterEach
@@ -72,35 +75,42 @@ public class PurchaseServiceTest {
 	}
 
 	@Test
-	@DisplayName("30000개 재고 > 3개씩 20개의 유저(스레드)가 구매 요청 > 60개의 재고가 팔림")
+	@DisplayName("N개 재고 > 3개씩 10개의 유저(스레드)가 구매 요청 > 30개의 재고가 팔림")
 	void purchaseOrder() {
-		execTest(purchaseService::purchaseTicketWithPLock);
+		execTest(purchaseService::purchaseTicketWithOLock);
 	}
 
 	@Test
-	@DisplayName("30000개 재고 > 3개씩 20개의 유저가 구매 요청, 단 재고 랜덤 추출 방식 사용 > 60개 재고가 팔림")
+	@DisplayName("N개 재고 > 3개씩 10개의 유저가 구매 요청, 단 재고 랜덤 추출 방식 사용 > 30개 재고가 팔림")
 	void purchaseOrderRandom() {
-		execTest(purchaseService::purchaseTicketWithPLockRandom);
+		execTest(purchaseService::purchaseTicketWithOLockRandom);
 	}
 
 	@Test
-	@DisplayName("30000개 재고 > 3개씩 20개의 유저가 구매 요청, 단 최적화된 재고 랜덤 추출 방식 사용 > 60개 재고가 팔림")
+	@DisplayName("N개 재고 > 3개씩 10개의 유저가 구매 요청, 단 최적화된 재고 랜덤 추출 방식 사용 > 30개 재고가 팔림")
 	void purchaseOrderRandomOptimize() {
-		execTest(purchaseService::purchaseTicketWithPLockRandomOptimize);
+		execTest(purchaseService::purchaseTicketWithOLockRandomOptimize);
 	}
+
+	// @Test
+	// void test() {
+	// 	Assertions.assertThat(1).isNotNull();
+	// }
 
 	private void execTest(PurchaseOrder purchaseOrder) {
 		// given
 		var executorService = Executors.newFixedThreadPool(USER_CNT);
 		var startLatch = new CountDownLatch(1);
 		var endLatch = new CountDownLatch(USER_CNT);
+		var atomicNumber = new AtomicInteger();
 
 		for (var i = 0; i < USER_CNT; i++) {
 			var userIdx = i;
 			executorService.submit(()->{
 				try {
 					startLatch.await();
-					purchaseOrder.exec(userEmails.get(userIdx), ticketingId, TICKET_PURCHASE_AMOUNT_PER_USER);
+					var retryCnt = purchaseOrder.exec(userEmails.get(userIdx), ticketingId, TICKET_PURCHASE_AMOUNT_PER_USER);
+					atomicNumber.addAndGet(retryCnt);
 				} catch (Exception err) {
 					throw new RuntimeException(err);
 				} finally {
@@ -117,6 +127,8 @@ public class PurchaseServiceTest {
 				throw new RuntimeException(err);
 			}
 		});
+
+		log.info("최종 재시도 횟수: {}", atomicNumber.get());
 
 		Assertions.assertThat(purchaseRepository.findAll().size()).isEqualTo(USER_CNT);
 		var unsaledStocks = ticketRepository.findByTicketingIdAndNonPurchased(ticketingId, Limit.unlimited());
@@ -137,6 +149,6 @@ public class PurchaseServiceTest {
 
 	@FunctionalInterface
 	private interface PurchaseOrder {
-		void exec(String email, UUID ticketingId, int amount);
+		int exec(String email, UUID ticketingId, int amount);
 	}
 }
