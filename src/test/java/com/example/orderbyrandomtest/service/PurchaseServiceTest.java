@@ -45,19 +45,17 @@ public class PurchaseServiceTest {
 	private List<String> userEmails;
 	private UUID ticketingId;
 
-	private final static int STOCK_CNT = 30000;
+	private final static int STOCK_CNT = 300;
 	private final static int USER_CNT = 20;
 	private final static int TICKET_PURCHASE_AMOUNT_PER_USER = 3;
 
 	@BeforeEach
 	@Transactional
 	void initTable() {
-		for (int idx = 0; idx < 3; idx++) {
-			var ticketing = ticketingRepository.save(Ticketing.builder().title("title").build());
-			var stocks = IntStream.rangeClosed(1, STOCK_CNT).boxed().map((i)-> Ticket.builder().ticketing(ticketing).build()).toList();
-			ticketRepository.saveAll(stocks);
-			ticketingId = ticketing.getId();
-		}
+		var ticketing = ticketingRepository.save(Ticketing.builder().title("title").build());
+		var stocks = IntStream.rangeClosed(1, STOCK_CNT).boxed().map((i)-> Ticket.builder().ticketing(ticketing).build()).toList();
+		ticketRepository.saveAll(stocks);
+		ticketingId = ticketing.getId();
 		userEmails = new ArrayList<>();
 		for (var num = 1; num <= USER_CNT; num++) {
 			userEmails.add("name" + num);
